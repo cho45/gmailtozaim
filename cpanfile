@@ -11,4 +11,5 @@ requires 'URI';
 requires 'MIME::Base64';
 requires 'Encode::IMAPUTF7';
 requires 'OAuth::Lite';
+requires 'Config::ENV';
 
