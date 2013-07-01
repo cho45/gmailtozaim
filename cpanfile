@@ -1,4 +1,5 @@
 requires 'DateTime';
+requires 'DateTime::Format::Mail';
 requires 'https://github.com/cho45/Encode-BaseN/archive/master.tar.gz';
 requires 'Log::Minimal';
 requires 'Path::Class';

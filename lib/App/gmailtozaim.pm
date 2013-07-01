@@ -5,9 +5,11 @@ use strict;
 use warnings;
 use WebService::Zaim;
 use Net::IMAP::Client::Gmail;
+use WWW::Amazon::Email::Parser;
 
 use Encode::BaseN; # cpanm https://github.com/cho45/Encode-BaseN/archive/master.zip
 use DateTime;
+use DateTime::Format::Mail;
 use Encode;
 use JSON;
 use Path::Class;
@@ -33,6 +35,7 @@ sub encoder {
 sub new {
 	my ($class, %args) = @_;
 	my $self = bless {
+		amazon_parser => WWW::Amazon::Email::Parser->new,
 		config_file => file(config->param('file'))->absolute,
 		argv => [],
 		days => 7,
@@ -72,6 +75,23 @@ sub run {
 
 	my $rakuten = $self->retrieve_rakutencard_data_from_gmail;
 	for my $data (@$rakuten) {
+		next if $data->{abstract} eq 'AMAZON.CO.JP';
+		my ($category, $genre) = @{ $self->guess_payment_genre($data->{abstract}) };
+		$self->book_in_to_zaim(
+			key          => $self->encoder->encode($data->{uid}),
+			category     => $category,
+			genre        => $genre,
+			amount       => $data->{amount},
+			date         => $data->{date},
+			from_account => 'クレジットカード',
+			# なぜか {"error":true,"message":"This consumer key does not have a permission for the action.","extra_message":null}
+			# place        => $data->{abstract},
+			comment      => $data->{abstract},
+		);
+	}
+
+	my $amazon = $self->retrieve_amazon_data_from_gmail;
+	for my $data (@$amazon) {
 		my ($category, $genre) = @{ $self->guess_payment_genre($data->{abstract}) };
 		$self->book_in_to_zaim(
 			key          => $self->encoder->encode($data->{uid}),
@@ -162,6 +182,7 @@ sub retrieve_rakutencard_data_from_gmail {
 		for my $msg (@$msgs) {
 			infof('[retrieve_rakutencard_data_from_gmail] get_rfc822_body id:%d (%s)', $msg->uid, $msg->date);
 			my $body = decode 'iso-2022-jp', ${ $self->gmail->get_rfc822_body($msg->uid) };
+			my $i = 0;
 			while ($body =~ m{
 				.利用日:\s*([^\n]+?)\s*
 				.利用先:\s*([^\n]+?)\s*
@@ -175,11 +196,47 @@ sub retrieve_rakutencard_data_from_gmail {
 				$date =~ s{/}{-}g;
 				$amount =~ s{\D}{}g;
 				push @$ret, {
-					uid      => $msg->uid,
+					uid      => $msg->uid * 100 + $i++,
 					date     => $date,
 					abstract => $abstract,
 					amount   => $amount,
 				};
+			}
+		}
+	}
+	$ret;
+}
+
+sub retrieve_amazon_data_from_gmail {
+	my ($self) = @_;
+	my $ret = [];
+	my $date = DateTime->now->add(days => -$self->{days})->ymd('/');
+	infof('[retrieve_amazon_data_from_gmail] Searching Gmail from %s', $date);
+	my $ids = $self->gmail->search_gmail(sprintf('from:ship-confirm@amazon.co.jp newer:%s', $date));
+	if (@$ids) {
+		infof('[retrieve_amazon_data_from_gmail] get_summaries with %d ids', scalar @$ids);
+		my $msgs = $self->gmail->get_summaries($ids);
+
+		for my $msg (@$msgs) {
+			eval {
+				# メールの日付が決済日時
+				my $date = DateTime::Format::Mail->parse_datetime($msg->date);
+				infof('[retrieve_amazon_data_from_gmail] get_rfc822_body id:%d (%s)', $msg->uid, $msg->date);
+				my $body = decode 'iso-2022-jp', ${ $self->gmail->get_rfc822_body($msg->uid) };
+				my $data = $self->{amazon_parser}->parse($body);
+
+				my $i = 0;
+				for my $item (@{ $data->{items} }) {
+					push @$ret, {
+						uid      => $msg->uid * 100 + $i++,
+						date     => $date->ymd('-'),
+						abstract => $item->{name},
+						amount   => $item->{amount_etc} || $item->{amount},
+					},
+				}
+			};
+			if ($@) {
+				critf('Error on processing message: %s', $@);
 			}
 		}
 	}

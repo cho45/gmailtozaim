@@ -192,9 +192,9 @@ sub payment {
 		amount          => $args{amount},
 		date            => $args{date},
 		from_account_id => $args{from_account_id},
-		comment         => encode_utf8($args{comment}),
-		name            => encode_utf8($args{name}),
-		place           => encode_utf8($args{place}),
+		comment         => encode_utf8($args{comment} || ''),
+		name            => encode_utf8($args{name} || ''),
+		place           => encode_utf8($args{place} || ''),
 	});
 }
 
