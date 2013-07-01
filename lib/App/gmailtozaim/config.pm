@@ -8,11 +8,11 @@ use Config::ENV 'APP_ENV', export => 'config';
 common load('payment_guess.conf');
 
 config default => {
-	file => ".$0",
+	file => ".gmailtozaim.pl",
 };
 
 config run => {
-	file => ".$0.run",
+	file => ".gmailtozaim.pl.run",
 };
 
 1;
