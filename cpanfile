@@ -10,7 +10,9 @@ requires 'LWP::Protocol::https';
 requires 'HTTP::Request::Common';
 requires 'URI';
 requires 'MIME::Base64';
+requires 'Email::MIME';
 requires 'Encode::IMAPUTF7';
 requires 'OAuth::Lite';
 requires 'Config::ENV';
+requires 'Net::IMAP::Client';
 

@@ -1,13 +1,15 @@
 #!/usr/bin/env perl
-
 use utf8;
 use strict;
 use warnings;
-use lib lib => glob 'modules/*/lib';
+use Path::Class;
+BEGIN { chdir file(__FILE__)->parent; }
+use lib 'lib';
 use Data::Dumper;
 use DateTime;
 
 use App::gmailtozaim;
+
 
 binmode STDOUT, ':utf8';
 binmode STDERR, ':utf8';

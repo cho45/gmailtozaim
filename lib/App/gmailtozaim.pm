@@ -15,6 +15,7 @@ use JSON;
 use Path::Class;
 use Log::Minimal;
 use Getopt::Long;
+use Email::MIME;
 
 use App::gmailtozaim::config;
 
@@ -181,7 +182,8 @@ sub retrieve_rakutencard_data_from_gmail {
 
 		for my $msg (@$msgs) {
 			infof('[retrieve_rakutencard_data_from_gmail] get_rfc822_body id:%d (%s)', $msg->uid, $msg->date);
-			my $body = decode 'iso-2022-jp', ${ $self->gmail->get_rfc822_body($msg->uid) };
+			my $mail = Email::MIME->new(${ $self->gmail->get_rfc822_body($msg->uid) });
+			my $body = [ grep { $_->content_type =~ qr|text/plain| } $mail->subparts ]->[0]->body_str;
 			my $i = 0;
 			while ($body =~ m{
 				.利用日:\s*([^\n]+?)\s*
@@ -218,11 +220,14 @@ sub retrieve_amazon_data_from_gmail {
 		my $msgs = $self->gmail->get_summaries($ids);
 
 		for my $msg (@$msgs) {
+			my $mail;
 			eval {
 				# メールの日付が決済日時
-				my $date = DateTime::Format::Mail->parse_datetime($msg->date);
+				my $date = DateTime::Format::Mail->parse_datetime($msg->date =~ s{\s*\(UTC\)$}{}r);
 				infof('[retrieve_amazon_data_from_gmail] get_rfc822_body id:%d (%s)', $msg->uid, $msg->date);
-				my $body = decode 'iso-2022-jp', ${ $self->gmail->get_rfc822_body($msg->uid) };
+				$mail = Email::MIME->new(${ $self->gmail->get_rfc822_body($msg->uid) });
+
+				my $body = $mail->subparts ? [ $mail->subparts ]->[0]->body_str : $mail->body_str;
 				my $data = $self->{amazon_parser}->parse($body);
 
 				my $i = 0;
@@ -237,6 +242,9 @@ sub retrieve_amazon_data_from_gmail {
 			};
 			if ($@) {
 				critf('Error on processing message: %s', $@);
+				critf('%s, %s : %s', $msg->uid, $msg->date);
+				use Data::Dumper;
+				warn Dumper $mail;
 			}
 		}
 	}
